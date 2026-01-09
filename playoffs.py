@@ -115,7 +115,7 @@ def fetch_live_playoff_stats():
 
     # Loop through all 4 playoff weeks
     for week_num, round_name in week_map.items():
-        params_games = {"week": str(week_num), "seasonType": "post", "season": "2024"}
+        params_games = {"week": str(week_num), "seasonType": "post", "season": "2025"}
         
         try:
             # Fetch Games for this specific playoff week
