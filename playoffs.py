@@ -57,6 +57,7 @@ def load_data():
         with open(DB_FILE, 'r') as f:
             try:
                 data = json.load(f)
+                
                 # Basic validation/migration: ensure data is in new dict format if it was old floats
                 first_manager = list(TEAMS.keys())[0]
                 if first_manager in data:
@@ -69,7 +70,12 @@ def load_data():
                             new_data[mgr] = {}
                             for r, value in rounds.items():
                                 new_data[mgr][r] = {"Total": value} if isinstance(value, (int, float)) else value
-                        return new_data
+                        data = new_data
+                
+                # Ensure WeeklyStats key exists for the new feature
+                if "WeeklyStats" not in data:
+                    data["WeeklyStats"] = {}
+                    
                 return data
             except json.JSONDecodeError:
                 pass # Fallback to initial data if file is corrupt
@@ -78,8 +84,8 @@ def load_data():
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
-    # Add a slot for detailed player stats
-    initial_data["PlayerStats"] = {}
+    # Add a slot for detailed player stats per week
+    initial_data["WeeklyStats"] = {}
     return initial_data
 
 def save_data(data):
@@ -91,9 +97,9 @@ def fetch_live_playoff_stats():
     # Initialize dictionary to hold stats for ALL rounds
     stats_by_round = {r: {} for r in PLAYOFF_ROUNDS}
     
-    # Initialize dictionary to hold cumulative detailed stats for players
-    # Key: Player Name (API Name), Value: Dict of stats
-    detailed_stats = {}
+    # Initialize dictionary to hold detailed stats segregated by ROUND
+    # Key: Round Name -> Key: Player Name -> Value: Dict of stats
+    weekly_detailed_stats = {r: {} for r in PLAYOFF_ROUNDS}
 
     # Map API weeks to our Round Names
     # Week 1 = Wild Card, Week 2 = Divisional, etc.
@@ -109,7 +115,7 @@ def fetch_live_playoff_stats():
 
     # Loop through all 4 playoff weeks
     for week_num, round_name in week_map.items():
-        params_games = {"week": str(week_num), "seasonType": "post", "season": "2024"}
+        params_games = {"week": str(week_num), "seasonType": "post", "season": "2025"}
         
         try:
             # Fetch Games for this specific playoff week
@@ -136,9 +142,9 @@ def fetch_live_playoff_stats():
                     # Add to the specific round bucket
                     stats_by_round[round_name][name] = ppr
                     
-                    # --- AGGREGATE DETAILED STATS ---
-                    if name not in detailed_stats:
-                        detailed_stats[name] = {
+                    # --- AGGREGATE DETAILED STATS FOR THIS ROUND ---
+                    if name not in weekly_detailed_stats[round_name]:
+                        weekly_detailed_stats[round_name][name] = {
                             "Passing Yards": 0,
                             "Rush/Rec Yards": 0,
                             "Passing TD": 0,
@@ -175,19 +181,20 @@ def fetch_live_playoff_stats():
                     tp_rush = int(rushing.get('twoPtRush', 0) or 0)
                     tp_rec = int(receiving.get('twoPtRec', 0) or 0)
                     
-                    # Update totals
-                    detailed_stats[name]["Passing Yards"] += p_yds
-                    detailed_stats[name]["Rush/Rec Yards"] += (r_yds + rec_yds)
-                    detailed_stats[name]["Passing TD"] += p_td
-                    detailed_stats[name]["Rush/Rec TD"] += (r_td + rec_td)
-                    detailed_stats[name]["Receptions"] += rec_count
-                    detailed_stats[name]["Fumble/Pick"] += (ints + fumbles)
-                    detailed_stats[name]["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
+                    # Update totals for this round
+                    stats_ref = weekly_detailed_stats[round_name][name]
+                    stats_ref["Passing Yards"] += p_yds
+                    stats_ref["Rush/Rec Yards"] += (r_yds + rec_yds)
+                    stats_ref["Passing TD"] += p_td
+                    stats_ref["Rush/Rec TD"] += (r_td + rec_td)
+                    stats_ref["Receptions"] += rec_count
+                    stats_ref["Fumble/Pick"] += (ints + fumbles)
+                    stats_ref["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
 
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
             
-    return stats_by_round, detailed_stats
+    return stats_by_round, weekly_detailed_stats
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Playoff Fantasy", layout="wide")
@@ -207,7 +214,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
-    empty_data["PlayerStats"] = {}
+    empty_data["WeeklyStats"] = {}
     save_data(empty_data)
     st.rerun()
 
@@ -215,7 +222,7 @@ st.divider()
 
 if st.button('🔄 Fetch & Save Live Stats'):
     with st.spinner('Looking for TDs ...'):
-        live_stats_by_round, detailed_stats = fetch_live_playoff_stats()
+        live_stats_by_round, weekly_detailed_stats = fetch_live_playoff_stats()
         
         if live_stats_by_round:
             # Iterate through each round returned by the API
@@ -241,8 +248,8 @@ if st.button('🔄 Fetch & Save Live Stats'):
                     round_detail["Total"] = round(team_round_total, 2)
                     current_db[manager][round_name] = round_detail
             
-            # Save Detailed Stats
-            current_db["PlayerStats"] = detailed_stats
+            # Save Detailed Stats (Weekly)
+            current_db["WeeklyStats"] = weekly_detailed_stats
             
             save_data(current_db)
             st.success("Refreshed: You are probably losing to Max again.")
@@ -256,7 +263,7 @@ with tab1:
     # --- DISPLAY LEADERBOARD (SUMMARY) ---
     summary_data = {}
     for manager, rounds in current_db.items():
-        if manager == "PlayerStats": continue # Skip the stats bucket
+        if manager == "WeeklyStats" or manager == "PlayerStats": continue # Skip the stats buckets
         
         summary_data[manager] = {}
         for r, details in rounds.items():
@@ -305,11 +312,14 @@ with tab1:
             )
 
 with tab2:
-    st.header("Detailed Player Stats (Cumulative)")
-    st.caption("Stats are aggregated across all playoff weeks fetched so far.")
+    st.header("Detailed Player Stats")
     
     # Retrieve stats from DB
-    stored_stats = current_db.get("PlayerStats", {})
+    weekly_stats_db = current_db.get("WeeklyStats", {})
+    
+    # Dropdown to select view
+    view_options = ["All Rounds (Cumulative)"] + PLAYOFF_ROUNDS
+    selected_view = st.selectbox("Select Week", view_options)
     
     all_player_stats = []
     
@@ -319,15 +329,32 @@ with tab2:
             # Map Roster Name -> API Name
             api_name = NAME_MAP.get(player, player)
             
-            # Get stats if available
-            p_stats = stored_stats.get(api_name, {
+            # Initialize stats for this player
+            combined_stats = {
                 "Passing Yards": 0, "Rush/Rec Yards": 0, "Passing TD": 0,
                 "Rush/Rec TD": 0, "Receptions": 0, "Fumble/Pick": 0, "2Pt Conv": 0
-            })
+            }
             
-            # Create a row
+            found_data = False
+            
+            if selected_view == "All Rounds (Cumulative)":
+                # Aggregate across all rounds
+                for r in PLAYOFF_ROUNDS:
+                    round_data = weekly_stats_db.get(r, {}).get(api_name)
+                    if round_data:
+                        found_data = True
+                        for k, v in round_data.items():
+                            combined_stats[k] += v
+            else:
+                # Get specific round data
+                round_data = weekly_stats_db.get(selected_view, {}).get(api_name)
+                if round_data:
+                    found_data = True
+                    combined_stats = round_data
+            
+            # Create a row if we have data or if it's just zeroed out
             row = {"Manager": manager, "Player": player}
-            row.update(p_stats)
+            row.update(combined_stats)
             all_player_stats.append(row)
             
     if all_player_stats:
@@ -344,7 +371,7 @@ with tab2:
                 "Receptions": "{:,}",
                 "Fumble/Pick": "{:,}",
                 "2Pt Conv": "{:,}"
-            })         
+            })
         )
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
