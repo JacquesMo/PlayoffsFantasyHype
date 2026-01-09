@@ -263,12 +263,12 @@ with tab1:
                 summary_data[manager][r] = details 
 
     df = pd.DataFrame.from_dict(summary_data, orient='index')
-    df['Total PPR'] = df.sum(axis=1)
-    df = df.sort_values(by="Total PPR", ascending=False)
+    df['Total'] = df.sum(axis=1)
+    df = df.sort_values(by="Total", ascending=False)
 
     st.subheader("Leaderboard")
     st.dataframe(
-        df.style.background_gradient(subset=['Total PPR'], cmap='Greens')
+        df.style.background_gradient(subset=['Total'], cmap='Greens')
         .format("{:.2f}")
     )
 
