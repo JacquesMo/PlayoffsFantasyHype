@@ -207,7 +207,7 @@ df = df.sort_values(by="Total PPR", ascending=False)
 
 st.subheader("Leaderboard")
 st.dataframe(
-    df.style.background_gradient(subset=['Total'], cmap='Greens')
+    df.style.background_gradient(subset=['PPR Total'], cmap='Greens')
     .format("{:.2f}")
 )
 
