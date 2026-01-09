@@ -7,13 +7,17 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # Your RapidAPI Key
+# NOTE: In a production app, it is safer to store this in streamlit secrets (.streamlit/secrets.toml)
 API_KEY = "aef7c53587msh8625f65e7e1022cp12a5ccjsn374e22013162"
+
 HEADERS = {
     "X-RapidAPI-Key": API_KEY,
     "X-RapidAPI-Host": "tank01-nfl-live-in-game-real-time-statistics-nfl.p.rapidapi.com"
 }
 
 # Local storage for persistence across weeks
+# NOTE: On hosted Streamlit Community Cloud, local files are ephemeral and reset on reboot.
+# For permanent storage, consider using st.session_state with an external database (like Firestore or Google Sheets).
 DB_FILE = "playoff_data.json"
 
 # Playoff Schedule Rounds
@@ -47,19 +51,24 @@ TEAMS = {
 def load_data():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, 'r') as f:
-            data = json.load(f)
-            # Basic validation/migration: ensure data is in new dict format if it was old floats
-            first_manager = list(TEAMS.keys())[0]
-            if first_manager in data:
-                first_round = PLAYOFF_ROUNDS[0]
-                if isinstance(data[first_manager].get(first_round), float):
-                    new_data = {}
-                    for mgr, rounds in data.items():
-                        new_data[mgr] = {}
-                        for r, val in rounds.items():
-                            new_data[mgr][r] = {"Total": val} if isinstance(val, (int, float)) else val
-                    return new_data
-            return data
+            try:
+                data = json.load(f)
+                # Basic validation/migration: ensure data is in new dict format if it was old floats
+                first_manager = list(TEAMS.keys())[0]
+                if first_manager in data:
+                    first_round = PLAYOFF_ROUNDS[0]
+                    # Check if the value is a float (old format) or dict (new format)
+                    val = data[first_manager].get(first_round)
+                    if isinstance(val, (float, int)):
+                        new_data = {}
+                        for mgr, rounds in data.items():
+                            new_data[mgr] = {}
+                            for r, value in rounds.items():
+                                new_data[mgr][r] = {"Total": value} if isinstance(value, (int, float)) else value
+                        return new_data
+                return data
+            except json.JSONDecodeError:
+                pass # Fallback to initial data if file is corrupt
 
     initial_data = {
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
@@ -133,50 +142,61 @@ current_db = load_data()
 st.sidebar.header("Admin Controls")
 st.sidebar.caption("Points are automatically assigned to weeks based on API Week Number (1=WC, 2=Div, 3=Conf, 4=SB).")
 
-# --- RESET BUTTON ---
-if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and resets to zero."):
-    # Initialize empty structure
-    empty_data = {
-        manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
-        for manager in TEAMS
-    }
-    save_data(empty_data)
-    st.rerun()
+# --- ADMIN AUTHENTICATION ---
+admin_password = st.sidebar.text_input("Enter Admin Password", type="password")
+
+if admin_password == "password123":  # Change this to your desired password
+    st.sidebar.success("Admin Mode Active")
+    
+    # --- FETCH BUTTON (Moved to Sidebar & Protected) ---
+    if st.sidebar.button('🔄 Fetch & Save Live Stats (Auto-Detect)'):
+        with st.spinner('Fetching live stats for all playoff rounds (Weeks 1-4)...'):
+            live_stats_by_round = fetch_live_playoff_stats()
+            
+            if live_stats_by_round:
+                # Iterate through each round returned by the API
+                for round_name, player_stats in live_stats_by_round.items():
+                    
+                    # Only process rounds that actually have data
+                    if not player_stats:
+                        continue
+
+                    for manager, roster in TEAMS.items():
+                        team_round_total = 0
+                        round_detail = {} # Store individual player scores for this round
+                        
+                        for player in roster:
+                            # Check name map first
+                            api_name = NAME_MAP.get(player, player)
+                            pts = player_stats.get(api_name, 0.0)
+                            
+                            team_round_total += pts
+                            round_detail[player] = pts
+                        
+                        # Update the database for the specific round
+                        round_detail["Total"] = round(team_round_total, 2)
+                        current_db[manager][round_name] = round_detail
+                
+                save_data(current_db)
+                st.sidebar.success("Scores updated successfully!")
+            else:
+                st.sidebar.error("Could not retrieve live stats.")
+
+    # --- RESET BUTTON (Protected) ---
+    if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and resets to zero."):
+        # Initialize empty structure
+        empty_data = {
+            manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
+            for manager in TEAMS
+        }
+        save_data(empty_data)
+        st.rerun()
+
+else:
+    if admin_password:
+        st.sidebar.error("Incorrect Password")
 
 st.divider()
-
-if st.button('🔄 Fetch & Save Live Stats (Auto-Detect)'):
-    with st.spinner('Fetching live stats for all playoff rounds (Weeks 1-4)...'):
-        live_stats_by_round = fetch_live_playoff_stats()
-        
-        if live_stats_by_round:
-            # Iterate through each round returned by the API
-            for round_name, player_stats in live_stats_by_round.items():
-                
-                # Only process rounds that actually have data
-                if not player_stats:
-                    continue
-
-                for manager, roster in TEAMS.items():
-                    team_round_total = 0
-                    round_detail = {} # Store individual player scores for this round
-                    
-                    for player in roster:
-                        # Check name map first
-                        api_name = NAME_MAP.get(player, player)
-                        pts = player_stats.get(api_name, 0.0)
-                        
-                        team_round_total += pts
-                        round_detail[player] = pts
-                    
-                    # Update the database for the specific round
-                    round_detail["Total"] = round(team_round_total, 2)
-                    current_db[manager][round_name] = round_detail
-            
-            save_data(current_db)
-            st.success("Scores have been auto-updated based on API Week schedule!")
-        else:
-            st.error("Could not retrieve live stats.")
 
 # --- DISPLAY LEADERBOARD (SUMMARY) ---
 summary_data = {}
