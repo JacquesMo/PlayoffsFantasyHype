@@ -158,7 +158,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
 
 st.divider()
 
-if st.button('🔄 Refresh Stats'):
+if st.button('🔄 Fetch & Save Live Stats'):
     with st.spinner('Looking for TDs ...'):
         live_stats_by_round = fetch_live_playoff_stats()
         
@@ -207,7 +207,7 @@ df = df.sort_values(by="Total PPR", ascending=False)
 
 st.subheader("Leaderboard")
 st.dataframe(
-    df.style.background_gradient(subset=['PPR Total'], cmap='Greens')
+    df.style.background_gradient(subset=['Total PPR'], cmap='Greens')
     .format("{:.2f}")
 )
 
