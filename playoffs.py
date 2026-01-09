@@ -34,16 +34,20 @@ NAME_MAP = {
     "Charb": "Zach Charbonnet",
     "Kenneth": "Kenneth Walker III",
     "Shakir": "Khalil Shakir",
-    "Diggs": "Stefon Diggs"
+    "Diggs": "Stefon Diggs",
+    "Nico": "Nico Collins",
+    "Puka": "Puka Nacua", 
+    "'Drake Maye'": "Drake Maye",
+    "Kyren": "Kyren Williams"
 }
 
 # --- YOUR TEAMS ---
 TEAMS = {
-    "Max": ["Trevor Lawrence", "TreVeyon Henderson", "Puka Nacua", "Nico Collins", "Christian Watson", "Parker Washington"],
+    "Max": ["Trevor Lawrence", "TreVeyon Henderson", "Puka", "Nico", "Christian Watson", "Parker Washington"],
     "Mash": ["Matthew Stafford", "James Cook", "A.J. Brown", "Rome", "Woody Marks", "Blake Corum"],
     "Relph": ["Sam Darnold", "Travis Etienne Jr.", "Njigba", "Courtland Sutton", "Dallas Goedert", "Omarion Hampton"],
     "Ovi": ["Caleb Williams", "CMC", "Tae", "Diggs", "Rhamondre Stevenson", "Luther Burden III"],
-    "Matalon": ["Drake Maye", "Kyren Williams", "DeVonta Smith", "Jauan Jennings", "RJ Harvey", "Hunter Henry"],
+    "Matalon": ["'Drake Maye'", "Kyren", "DeVonta Smith", "Jauan Jennings", "RJ Harvey", "Hunter Henry"],
     "Jacq/MG3": ["Josh Allen", "Saquon Barkley", "Shakir", "DK Metcalf", "Kenneth", "Charb"]
 }
 
@@ -183,7 +187,7 @@ if st.button('🔄 Fetch & Save Live Stats (Auto-Detect)'):
                     current_db[manager][round_name] = round_detail
             
             save_data(current_db)
-            st.success("Scores have been auto-updated based on API Week schedule!")
+            st.success("Refreshed: You are probably losing to Max again.")
         else:
             st.error("Could not retrieve live stats.")
 
