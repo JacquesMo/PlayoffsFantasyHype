@@ -143,7 +143,7 @@ def fetch_live_playoff_stats():
                             "Rush/Rec Yards": 0,
                             "Passing TD": 0,
                             "Rush/Rec TD": 0,
-                            "PPR": 0.0,
+                            "Receptions": 0,
                             "Fumble/Pick": 0,
                             "2Pt Conv": 0
                         }
@@ -162,6 +162,9 @@ def fetch_live_playoff_stats():
                     p_td = int(passing.get('passTD', 0) or 0)
                     r_td = int(rushing.get('rushTD', 0) or 0)
                     rec_td = int(receiving.get('recTD', 0) or 0)
+
+                    # Receptions
+                    rec_count = int(receiving.get('receptions', 0) or 0)
                     
                     # Turnovers
                     ints = int(passing.get('int', 0) or 0)
@@ -177,7 +180,7 @@ def fetch_live_playoff_stats():
                     detailed_stats[name]["Rush/Rec Yards"] += (r_yds + rec_yds)
                     detailed_stats[name]["Passing TD"] += p_td
                     detailed_stats[name]["Rush/Rec TD"] += (r_td + rec_td)
-                    detailed_stats[name]["PPR"] += ppr
+                    detailed_stats[name]["Receptions"] += rec_count
                     detailed_stats[name]["Fumble/Pick"] += (ints + fumbles)
                     detailed_stats[name]["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
 
@@ -319,7 +322,7 @@ with tab2:
             # Get stats if available
             p_stats = stored_stats.get(api_name, {
                 "Passing Yards": 0, "Rush/Rec Yards": 0, "Passing TD": 0,
-                "Rush/Rec TD": 0, "PPR": 0.0, "Fumble/Pick": 0, "2Pt Conv": 0
+                "Rush/Rec TD": 0, "Receptions": 0, "Fumble/Pick": 0, "2Pt Conv": 0
             })
             
             # Create a row
@@ -329,19 +332,20 @@ with tab2:
             
     if all_player_stats:
         stats_df = pd.DataFrame(all_player_stats)
-        # Sort by PPR descending
-        stats_df = stats_df.sort_values(by="PPR", ascending=False)
+        # Sort by Receptions descending
+        stats_df = stats_df.sort_values(by="Receptions", ascending=False)
         
         st.dataframe(
             stats_df.style.format({
-                "Passing Yards": "{{:,}}",
-                "Rush/Rec Yards": "{{:,}}",
-                "Passing TD": "{{:,}}",
-                "Rush/Rec TD": "{{:,}}",
-                "PPR": "{{:,}}",
-                "Fumble/Pick": "{{:,}}",
-                "2Pt Conv": "{{:,}}"
+                "Passing Yards": "{:,}",
+                "Rush/Rec Yards": "{:,}",
+                "Passing TD": "{:,}",
+                "Rush/Rec TD": "{:,}",
+                "Receptions": "{:,}",
+                "Fumble/Pick": "{:,}",
+                "2Pt Conv": "{:,}"
             })
+            .background_gradient(subset=["Receptions"], cmap="Oranges")
         )
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
