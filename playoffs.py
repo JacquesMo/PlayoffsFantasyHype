@@ -334,13 +334,13 @@ with tab2:
         
         st.dataframe(
             stats_df.style.format({
-                "Passing Yards": "{:,}",
-                "Rush/Rec Yards": "{:,}",
-                "Passing TD": "{:,}",
-                "Rush/Rec TD": "{:,}",
-                "PPR": "{:.1f}",
-                "Fumble/Pick": "{:,}",
-                "2Pt Conv": "{:,}"
+                "Passing Yards": "{{:,}}",
+                "Rush/Rec Yards": "{{:,}}",
+                "Passing TD": "{{:,}}",
+                "Rush/Rec TD": "{{:,}}",
+                "PPR": "{{:,}}",
+                "Fumble/Pick": "{{:,}}",
+                "2Pt Conv": "{{:,}}"
             })
         )
     else:
