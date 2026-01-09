@@ -220,7 +220,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
 
 st.divider()
 
-if st.button('🔄 Get Live Stats'):
+if st.button('🔄 Fetch & Save Live Stats'):
     with st.spinner('Looking for TDs ...'):
         live_stats_by_round, weekly_detailed_stats = fetch_live_playoff_stats()
         
