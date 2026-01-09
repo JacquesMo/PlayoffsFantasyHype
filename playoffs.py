@@ -151,8 +151,7 @@ def fetch_live_playoff_stats():
                             "Rush/Rec TD": 0,
                             "Receptions": 0,
                             "Fumble/Pick": 0,
-                            "2Pt Conv": 0,
-                            "PPR": 0.0
+                            "2Pt Conv": 0
                         }
                     
                     # Extract raw stats safely
@@ -191,7 +190,6 @@ def fetch_live_playoff_stats():
                     stats_ref["Receptions"] += rec_count
                     stats_ref["Fumble/Pick"] += (ints + fumbles)
                     stats_ref["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
-                    stats_ref["PPR"] += ppr
 
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
@@ -334,8 +332,7 @@ with tab2:
             # Initialize stats for this player
             combined_stats = {
                 "Passing Yards": 0, "Rush/Rec Yards": 0, "Passing TD": 0,
-                "Rush/Rec TD": 0, "Receptions": 0, "Fumble/Pick": 0, "2Pt Conv": 0,
-                "PPR": 0.0
+                "Rush/Rec TD": 0, "Receptions": 0, "Fumble/Pick": 0, "2Pt Conv": 0
             }
             
             found_data = False
@@ -347,27 +344,23 @@ with tab2:
                     if round_data:
                         found_data = True
                         for k, v in round_data.items():
-                            if k in combined_stats:
-                                combined_stats[k] += v
+                            combined_stats[k] += v
             else:
                 # Get specific round data
                 round_data = weekly_stats_db.get(selected_view, {}).get(api_name)
                 if round_data:
                     found_data = True
-                    # Only take relevant keys to avoid overwriting with incomplete data
-                    for k in combined_stats.keys():
-                        if k in round_data:
-                            combined_stats[k] = round_data[k]
+                    combined_stats = round_data
             
-            # Create a row
+            # Create a row if we have data or if it's just zeroed out
             row = {"Manager": manager, "Player": player}
             row.update(combined_stats)
             all_player_stats.append(row)
             
     if all_player_stats:
         stats_df = pd.DataFrame(all_player_stats)
-        # Sort by PPR descending
-        stats_df = stats_df.sort_values(by="PPR", ascending=False)
+        # Sort by Receptions descending
+        stats_df = stats_df.sort_values(by="Receptions", ascending=False)
         
         st.dataframe(
             stats_df.style.format({
@@ -377,10 +370,8 @@ with tab2:
                 "Rush/Rec TD": "{:,}",
                 "Receptions": "{:,}",
                 "Fumble/Pick": "{:,}",
-                "2Pt Conv": "{:,}",
-                "PPR": "{:.2f}"
+                "2Pt Conv": "{:,}"
             })
-            .background_gradient(subset=["PPR"], cmap="Oranges")
         )
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
