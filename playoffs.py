@@ -78,6 +78,8 @@ def load_data():
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
+    # Add a slot for detailed player stats
+    initial_data["PlayerStats"] = {}
     return initial_data
 
 def save_data(data):
@@ -89,6 +91,10 @@ def fetch_live_playoff_stats():
     # Initialize dictionary to hold stats for ALL rounds
     stats_by_round = {r: {} for r in PLAYOFF_ROUNDS}
     
+    # Initialize dictionary to hold cumulative detailed stats for players
+    # Key: Player Name (API Name), Value: Dict of stats
+    detailed_stats = {}
+
     # Map API weeks to our Round Names
     # Week 1 = Wild Card, Week 2 = Divisional, etc.
     week_map = {
@@ -130,10 +136,55 @@ def fetch_live_playoff_stats():
                     # Add to the specific round bucket
                     stats_by_round[round_name][name] = ppr
                     
+                    # --- AGGREGATE DETAILED STATS ---
+                    if name not in detailed_stats:
+                        detailed_stats[name] = {
+                            "Passing Yards": 0,
+                            "Rush/Rec Yards": 0,
+                            "Passing TD": 0,
+                            "Rush/Rec TD": 0,
+                            "PPR": 0.0,
+                            "Fumble/Pick": 0,
+                            "2Pt Conv": 0
+                        }
+                    
+                    # Extract raw stats safely
+                    passing = info.get('Passing', {})
+                    rushing = info.get('Rushing', {})
+                    receiving = info.get('Receiving', {})
+                    
+                    # Yards
+                    p_yds = int(passing.get('passYds', 0) or 0)
+                    r_yds = int(rushing.get('rushYds', 0) or 0)
+                    rec_yds = int(receiving.get('recYds', 0) or 0)
+                    
+                    # TDs
+                    p_td = int(passing.get('passTD', 0) or 0)
+                    r_td = int(rushing.get('rushTD', 0) or 0)
+                    rec_td = int(receiving.get('recTD', 0) or 0)
+                    
+                    # Turnovers
+                    ints = int(passing.get('int', 0) or 0)
+                    fumbles = int(info.get('fumblesLost', 0) or 0)
+                    
+                    # 2Pt (Approximate based on common keys)
+                    tp_pass = int(passing.get('twoPtPass', 0) or 0)
+                    tp_rush = int(rushing.get('twoPtRush', 0) or 0)
+                    tp_rec = int(receiving.get('twoPtRec', 0) or 0)
+                    
+                    # Update totals
+                    detailed_stats[name]["Passing Yards"] += p_yds
+                    detailed_stats[name]["Rush/Rec Yards"] += (r_yds + rec_yds)
+                    detailed_stats[name]["Passing TD"] += p_td
+                    detailed_stats[name]["Rush/Rec TD"] += (r_td + rec_td)
+                    detailed_stats[name]["PPR"] += ppr
+                    detailed_stats[name]["Fumble/Pick"] += (ints + fumbles)
+                    detailed_stats[name]["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
+
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
             
-    return stats_by_round
+    return stats_by_round, detailed_stats
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Playoff Fantasy", layout="wide")
@@ -153,6 +204,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
+    empty_data["PlayerStats"] = {}
     save_data(empty_data)
     st.rerun()
 
@@ -160,7 +212,7 @@ st.divider()
 
 if st.button('🔄 Fetch & Save Live Stats'):
     with st.spinner('Looking for TDs ...'):
-        live_stats_by_round = fetch_live_playoff_stats()
+        live_stats_by_round, detailed_stats = fetch_live_playoff_stats()
         
         if live_stats_by_round:
             # Iterate through each round returned by the API
@@ -186,56 +238,103 @@ if st.button('🔄 Fetch & Save Live Stats'):
                     round_detail["Total"] = round(team_round_total, 2)
                     current_db[manager][round_name] = round_detail
             
+            # Save Detailed Stats
+            current_db["PlayerStats"] = detailed_stats
+            
             save_data(current_db)
             st.success("Refreshed: You are probably losing to Max again.")
         else:
             st.error("Could not retrieve live stats.")
 
-# --- DISPLAY LEADERBOARD (SUMMARY) ---
-summary_data = {}
-for manager, rounds in current_db.items():
-    summary_data[manager] = {}
-    for r, details in rounds.items():
-        if isinstance(details, dict):
-            summary_data[manager][r] = details.get("Total", 0.0)
-        else:
-            summary_data[manager][r] = details 
+# --- TABS FOR VIEWING DATA ---
+tab1, tab2 = st.tabs(["🏆 Leaderboard & Rosters", "📊 Player Stats"])
 
-df = pd.DataFrame.from_dict(summary_data, orient='index')
-df['Total PPR'] = df.sum(axis=1)
-df = df.sort_values(by="Total PPR", ascending=False)
-
-st.subheader("Leaderboard")
-st.dataframe(
-    df.style.background_gradient(subset=['Total PPR'], cmap='Greens')
-    .format("{:.2f}")
-)
-
-# --- DETAILED ROSTER BREAKDOWN ---
-st.header("Team Rosters & Weekly Breakdown")
-
-for manager, roster in TEAMS.items():
-    with st.expander(f"{manager}'s Team"):
-        team_breakdown = []
-        for player in roster:
-            player_row = {"Player": player}
-            player_total = 0
-            
-            for r in PLAYOFF_ROUNDS:
-                round_data = current_db.get(manager, {}).get(r, {})
-                if isinstance(round_data, dict):
-                    score = round_data.get(player, 0.0)
-                else:
-                    score = 0.0 
-                
-                player_row[r] = score
-                player_total += score
-            
-            player_row["Total"] = player_total
-            team_breakdown.append(player_row)
+with tab1:
+    # --- DISPLAY LEADERBOARD (SUMMARY) ---
+    summary_data = {}
+    for manager, rounds in current_db.items():
+        if manager == "PlayerStats": continue # Skip the stats bucket
         
-        team_df = pd.DataFrame(team_breakdown)
+        summary_data[manager] = {}
+        for r, details in rounds.items():
+            if isinstance(details, dict):
+                summary_data[manager][r] = details.get("Total", 0.0)
+            else:
+                summary_data[manager][r] = details 
+
+    df = pd.DataFrame.from_dict(summary_data, orient='index')
+    df['Total PPR'] = df.sum(axis=1)
+    df = df.sort_values(by="Total PPR", ascending=False)
+
+    st.subheader("Leaderboard")
+    st.dataframe(
+        df.style.background_gradient(subset=['Total PPR'], cmap='Greens')
+        .format("{:.2f}")
+    )
+
+    # --- DETAILED ROSTER BREAKDOWN ---
+    st.header("Team Rosters & Weekly Breakdown")
+
+    for manager, roster in TEAMS.items():
+        with st.expander(f"{manager}'s Team"):
+            team_breakdown = []
+            for player in roster:
+                player_row = {"Player": player}
+                player_total = 0
+                
+                for r in PLAYOFF_ROUNDS:
+                    round_data = current_db.get(manager, {}).get(r, {})
+                    if isinstance(round_data, dict):
+                        score = round_data.get(player, 0.0)
+                    else:
+                        score = 0.0 
+                    
+                    player_row[r] = score
+                    player_total += score
+                
+                player_row["Total"] = player_total
+                team_breakdown.append(player_row)
+            
+            team_df = pd.DataFrame(team_breakdown)
+            st.dataframe(
+                team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]})
+                .background_gradient(subset=["Total"], cmap="Blues")
+            )
+
+with tab2:
+    st.header("Detailed Player Stats (Cumulative)")
+    st.caption("Stats are aggregated across all playoff weeks fetched so far.")
+    
+    # Retrieve stats from DB
+    stored_stats = current_db.get("PlayerStats", {})
+    
+    all_player_stats = []
+    
+    # Iterate through ALL managers to get their players
+    for manager, roster in TEAMS.items():
+        for player in roster:
+            # Map Roster Name -> API Name
+            api_name = NAME_MAP.get(player, player)
+            
+            # Get stats if available
+            p_stats = stored_stats.get(api_name, {
+                "Passing Yards": 0, "Rush/Rec Yards": 0, "Passing TD": 0,
+                "Rush/Rec TD": 0, "PPR": 0.0, "Fumble/Pick": 0, "2Pt Conv": 0
+            })
+            
+            # Create a row
+            row = {"Manager": manager, "Player": player}
+            row.update(p_stats)
+            all_player_stats.append(row)
+            
+    if all_player_stats:
+        stats_df = pd.DataFrame(all_player_stats)
+        # Sort by PPR descending
+        stats_df = stats_df.sort_values(by="PPR", ascending=False)
+        
         st.dataframe(
-            team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]})
-            .background_gradient(subset=["Total"], cmap="Blues")
+            stats_df.style.format({"PPR": "{:.2f}"})
+            .background_gradient(subset=["PPR"], cmap="Oranges")
         )
+    else:
+        st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
