@@ -21,7 +21,7 @@ HEADERS = {
 DB_FILE = "playoff_data.json"
 
 # Playoff Schedule Rounds
-PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference", "Super Bowl"]
+PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super Bowl"]
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -94,7 +94,7 @@ def fetch_live_playoff_stats():
     week_map = {
         1: "Wild Card",
         2: "Divisional",
-        3: "Conference",
+        3: "Conference Championship",
         4: "Super Bowl"
     }
 
@@ -136,8 +136,8 @@ def fetch_live_playoff_stats():
     return stats_by_round
 
 # --- STREAMLIT UI ---
-st.set_page_config(page_title="Playoff Fantasy Tracker", layout="wide")
-st.title("🏈 NFL Playoff Fantasy Tracker")
+st.set_page_config(page_title="Playoff Fantasy", layout="wide")
+st.title("🏈 Relph League Playoff Fantasy")
 
 # Load existing data
 current_db = load_data()
@@ -158,8 +158,8 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
 
 st.divider()
 
-if st.button('🔄 Fetch & Save Live Stats (Auto-Detect)'):
-    with st.spinner('Fetching live stats for all playoff rounds (Weeks 1-4)...'):
+if st.button('🔄 Fetch & Save Live Stats'):
+    with st.spinner('Looking for TDs ...'):
         live_stats_by_round = fetch_live_playoff_stats()
         
         if live_stats_by_round:
@@ -215,7 +215,7 @@ st.dataframe(
 st.header("Team Rosters & Weekly Breakdown")
 
 for manager, roster in TEAMS.items():
-    with st.expander(f"view {manager}'s Team"):
+    with st.expander(f"{manager}'s Team"):
         team_breakdown = []
         for player in roster:
             player_row = {"Player": player}
