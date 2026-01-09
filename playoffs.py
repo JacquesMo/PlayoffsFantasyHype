@@ -344,8 +344,7 @@ with tab2:
                 "Receptions": "{:,}",
                 "Fumble/Pick": "{:,}",
                 "2Pt Conv": "{:,}"
-            })
-            .background_gradient(subset=["Receptions"], cmap="Oranges")
+            })         
         )
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
