@@ -7,7 +7,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # Your RapidAPI Key
-API_KEY = st.secrets["rapidapi_key"]
+API_KEY = "aef7c53587msh8625f65e7e1022cp12a5ccjsn374e22013162"
 HEADERS = {
     "X-RapidAPI-Key": API_KEY,
     "X-RapidAPI-Host": "tank01-nfl-live-in-game-real-time-statistics-nfl.p.rapidapi.com"
