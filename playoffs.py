@@ -333,8 +333,15 @@ with tab2:
         stats_df = stats_df.sort_values(by="PPR", ascending=False)
         
         st.dataframe(
-            stats_df.style.format({"PPR": "{:.2f}"})
-            .background_gradient(subset=["PPR"], cmap="Oranges")
+            stats_df.style.format({
+                "Passing Yards": "{:,}",
+                "Rush/Rec Yards": "{:,}",
+                "Passing TD": "{:,}",
+                "Rush/Rec TD": "{:,}",
+                "PPR": "{:.1f}",
+                "Fumble/Pick": "{:,}",
+                "2Pt Conv": "{:,}"
+            })
         )
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
