@@ -145,7 +145,7 @@ st.sidebar.caption("Points are automatically assigned to weeks based on API Week
 # --- ADMIN AUTHENTICATION ---
 admin_password = st.sidebar.text_input("Enter Admin Password", type="password")
 
-if admin_password == "password123":  # Change this to your desired password
+if admin_password == "relph":  # Change this to your desired password
     st.sidebar.success("Admin Mode Active")
     
     # --- FETCH BUTTON (Moved to Sidebar & Protected) ---
