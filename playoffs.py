@@ -7,7 +7,6 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # Your RapidAPI Key
-# NOTE: In a production app, it is safer to store this in streamlit secrets (.streamlit/secrets.toml)
 API_KEY = "aef7c53587msh8625f65e7e1022cp12a5ccjsn374e22013162"
 
 HEADERS = {
@@ -16,12 +15,15 @@ HEADERS = {
 }
 
 # Local storage for persistence across weeks
-# NOTE: On hosted Streamlit Community Cloud, local files are ephemeral and reset on reboot.
-# For permanent storage, consider using st.session_state with an external database (like Firestore or Google Sheets).
 DB_FILE = "playoff_data.json"
 
 # Playoff Schedule Rounds
 PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super Bowl"]
+
+# --- ELIMINATED TEAMS ---
+# ADMIN: Add the 2 or 3 letter abbreviation of eliminated teams here to highlight them in red.
+# Example: ["MIA", "NYG", "CLE"]
+ELIMINATED_TEAMS = [] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -72,9 +74,11 @@ def load_data():
                                 new_data[mgr][r] = {"Total": value} if isinstance(value, (int, float)) else value
                         data = new_data
                 
-                # Ensure WeeklyStats key exists for the new feature
+                # Ensure keys exist for new features
                 if "WeeklyStats" not in data:
                     data["WeeklyStats"] = {}
+                if "PlayerTeams" not in data:
+                    data["PlayerTeams"] = {}
                     
                 return data
             except json.JSONDecodeError:
@@ -84,8 +88,8 @@ def load_data():
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
-    # Add a slot for detailed player stats per week
     initial_data["WeeklyStats"] = {}
+    initial_data["PlayerTeams"] = {} # Store Player -> NFL Team mapping
     return initial_data
 
 def save_data(data):
@@ -98,11 +102,11 @@ def fetch_live_playoff_stats():
     stats_by_round = {r: {} for r in PLAYOFF_ROUNDS}
     
     # Initialize dictionary to hold detailed stats segregated by ROUND
-    # Key: Round Name -> Key: Player Name -> Value: Dict of stats
     weekly_detailed_stats = {r: {} for r in PLAYOFF_ROUNDS}
 
-    # Map API weeks to our Round Names
-    # Week 1 = Wild Card, Week 2 = Divisional, etc.
+    # Store Player -> NFL Team mapping (e.g. {"Josh Allen": "BUF"})
+    player_teams_map = {}
+
     week_map = {
         1: "Wild Card",
         2: "Divisional",
@@ -136,6 +140,10 @@ def fetch_live_playoff_stats():
                 p_stats = box_data.get('body', {}).get('playerStats', {})
                 for pid, info in p_stats.items():
                     name = info.get('longName')
+                    team_abbr = info.get('team', '') # Capture NFL Team
+                    
+                    if name and team_abbr:
+                        player_teams_map[name] = team_abbr
 
                     # --- EXTRACT RAW STATS SAFELY ---
                     passing = info.get('Passing', {})
@@ -165,7 +173,6 @@ def fetch_live_playoff_stats():
                     tp_rec = int(receiving.get('twoPtRec', 0) or 0)
 
                     # --- MANUAL PPR CALCULATION ---
-                    # Enforcing -2 for Turnovers
                     ppr_score = (
                         (p_yds * 0.04) +      # Passing Yards
                         (p_td * 4) +          # Passing TDs
@@ -183,7 +190,7 @@ def fetch_live_playoff_stats():
                     
                     ppr_score = round(ppr_score, 2)
                     
-                    # Add to the specific round bucket (Leaderboard usage)
+                    # Add to the specific round bucket
                     stats_by_round[round_name][name] = ppr_score
                     
                     # --- AGGREGATE DETAILED STATS FOR THIS ROUND ---
@@ -199,7 +206,7 @@ def fetch_live_playoff_stats():
                             "PPR": 0.0
                         }
                     
-                    # Update totals for this round
+                    # Update totals
                     stats_ref = weekly_detailed_stats[round_name][name]
                     stats_ref["Passing Yards"] += p_yds
                     stats_ref["Rush/Rec Yards"] += (r_yds + rec_yds)
@@ -213,7 +220,26 @@ def fetch_live_playoff_stats():
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
             
-    return stats_by_round, weekly_detailed_stats
+    return stats_by_round, weekly_detailed_stats, player_teams_map
+
+# --- STYLING HELPERS ---
+def style_eliminated_rows(row, player_teams_db):
+    """
+    Pandas styling function to highlight rows in red if the player's team is eliminated.
+    Expects 'Player' to be a column in the row.
+    """
+    player_name = row.get("Player")
+    if not player_name:
+        return ['' for _ in row]
+    
+    # Map back to API name to look up team
+    api_name = NAME_MAP.get(player_name, player_name)
+    team = player_teams_db.get(api_name)
+    
+    # Check if team is eliminated
+    if team and team in ELIMINATED_TEAMS:
+        return ['background-color: #ffcccc; color: #8b0000;' for _ in row]
+    return ['' for _ in row]
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Playoff Fantasy", layout="wide")
@@ -228,50 +254,49 @@ st.sidebar.caption("Points are automatically assigned to weeks based on API Week
 
 # --- RESET BUTTON ---
 if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and resets to zero."):
-    # Initialize empty structure
     empty_data = {
         manager: {round_name: {"Total": 0.0} for round_name in PLAYOFF_ROUNDS} 
         for manager in TEAMS
     }
     empty_data["WeeklyStats"] = {}
+    empty_data["PlayerTeams"] = {}
     save_data(empty_data)
     st.rerun()
 
 st.divider()
 
 if st.button('🔄 Fetch & Save Live Stats'):
-    with st.spinner('Looking for TDs ...'):
-        live_stats_by_round, weekly_detailed_stats = fetch_live_playoff_stats()
+    with st.spinner('Checking game status & team affiliations...'):
+        live_stats_by_round, weekly_detailed_stats, player_teams_map = fetch_live_playoff_stats()
         
         if live_stats_by_round:
-            # Iterate through each round returned by the API
+            # 1. Update Scores
             for round_name, player_stats in live_stats_by_round.items():
-                
-                # Only process rounds that actually have data
-                if not player_stats:
-                    continue
+                if not player_stats: continue
 
                 for manager, roster in TEAMS.items():
                     team_round_total = 0
-                    round_detail = {} # Store individual player scores for this round
+                    round_detail = {} 
                     
                     for player in roster:
-                        # Check name map first
                         api_name = NAME_MAP.get(player, player)
                         pts = player_stats.get(api_name, 0.0)
-                        
                         team_round_total += pts
                         round_detail[player] = pts
                     
-                    # Update the database for the specific round
                     round_detail["Total"] = round(team_round_total, 2)
                     current_db[manager][round_name] = round_detail
             
-            # Save Detailed Stats (Weekly)
+            # 2. Update Detailed Stats
             current_db["WeeklyStats"] = weekly_detailed_stats
             
+            # 3. Update Player Teams (Merge with existing to keep history)
+            if "PlayerTeams" not in current_db:
+                current_db["PlayerTeams"] = {}
+            current_db["PlayerTeams"].update(player_teams_map)
+            
             save_data(current_db)
-            st.success("Refreshed: You are probably losing to Max again.")
+            st.success("Stats & Team Status Updated!")
         else:
             st.error("Could not retrieve live stats.")
 
@@ -279,10 +304,10 @@ if st.button('🔄 Fetch & Save Live Stats'):
 tab1, tab2 = st.tabs(["🏆 Leaderboard & Rosters", "📊 Player Stats"])
 
 with tab1:
-    # --- DISPLAY LEADERBOARD (SUMMARY) ---
+    # --- DISPLAY LEADERBOARD ---
     summary_data = {}
     for manager, rounds in current_db.items():
-        if manager == "WeeklyStats" or manager == "PlayerStats": continue # Skip the stats buckets
+        if manager in ["WeeklyStats", "PlayerStats", "PlayerTeams"]: continue
         
         summary_data[manager] = {}
         for r, details in rounds.items():
@@ -303,6 +328,8 @@ with tab1:
 
     # --- DETAILED ROSTER BREAKDOWN ---
     st.header("Team Rosters & Weekly Breakdown")
+    if ELIMINATED_TEAMS:
+        st.caption(f"🟥 Highlighted rows indicate players on eliminated teams: {', '.join(ELIMINATED_TEAMS)}")
 
     for manager, roster in TEAMS.items():
         with st.expander(f"{manager}'s Team"):
@@ -325,16 +352,20 @@ with tab1:
                 team_breakdown.append(player_row)
             
             team_df = pd.DataFrame(team_breakdown)
-            st.dataframe(
-                team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]})
-                .background_gradient(subset=["Total"], cmap="Blues")
-            )
+            
+            # Apply Elimination Highlight
+            formatted_df = team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]}) \
+                .background_gradient(subset=["Total"], cmap="Blues") \
+                .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {})), axis=1)
+
+            st.dataframe(formatted_df)
 
 with tab2:
     st.header("Detailed Player Stats")
     
     # Retrieve stats from DB
     weekly_stats_db = current_db.get("WeeklyStats", {})
+    player_teams_db = current_db.get("PlayerTeams", {})
     
     # Dropdown to select view
     view_options = ["All Rounds (Cumulative)"] + PLAYOFF_ROUNDS
@@ -347,9 +378,11 @@ with tab2:
         for player in roster:
             # Map Roster Name -> API Name
             api_name = NAME_MAP.get(player, player)
+            team_abbr = player_teams_db.get(api_name, "")
             
             # Initialize stats for this player
             combined_stats = {
+                "Team": team_abbr,
                 "Passing Yards": 0, "Rush/Rec Yards": 0, "Passing TD": 0,
                 "Rush/Rec TD": 0, "Receptions": 0, "Fumble/Pick": 0, "2Pt Conv": 0,
                 "PPR": 0.0
@@ -371,23 +404,21 @@ with tab2:
                 round_data = weekly_stats_db.get(selected_view, {}).get(api_name)
                 if round_data:
                     found_data = True
-                    # Only take relevant keys to avoid overwriting with incomplete data
                     for k in combined_stats.keys():
                         if k in round_data:
                             combined_stats[k] = round_data[k]
             
-            # Create a row if we have data or if it's just zeroed out
+            # Create a row
             row = {"Manager": manager, "Player": player}
             row.update(combined_stats)
             all_player_stats.append(row)
             
     if all_player_stats:
         stats_df = pd.DataFrame(all_player_stats)
-        # Sort by PPR descending
         stats_df = stats_df.sort_values(by="PPR", ascending=False)
         
-        st.dataframe(
-            stats_df.style.format({
+        # Apply Styling
+        styled_stats_df = stats_df.style.format({
                 "Passing Yards": "{:,}",
                 "Rush/Rec Yards": "{:,}",
                 "Passing TD": "{:,}",
@@ -396,8 +427,10 @@ with tab2:
                 "Fumble/Pick": "{:,}",
                 "2Pt Conv": "{:,}",
                 "PPR": "{:.2f}"
-            })
-            .background_gradient(subset=["PPR"], cmap="Oranges")
-        )
+            }) \
+            .background_gradient(subset=["PPR"], cmap="Oranges") \
+            .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1)
+        
+        st.dataframe(styled_stats_df)
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
