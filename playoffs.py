@@ -79,6 +79,8 @@ def load_data():
                     data["WeeklyStats"] = {}
                 if "PlayerTeams" not in data:
                     data["PlayerTeams"] = {}
+                if "LiveTeams" not in data:
+                    data["LiveTeams"] = []
                     
                 return data
             except json.JSONDecodeError:
@@ -90,6 +92,7 @@ def load_data():
     }
     initial_data["WeeklyStats"] = {}
     initial_data["PlayerTeams"] = {} # Store Player -> NFL Team mapping
+    initial_data["LiveTeams"] = []   # Store teams currently playing
     return initial_data
 
 def save_data(data):
@@ -106,6 +109,9 @@ def fetch_live_playoff_stats():
 
     # Store Player -> NFL Team mapping (e.g. {"Josh Allen": "BUF"})
     player_teams_map = {}
+    
+    # Store Teams currently in a live game
+    live_teams_set = set()
 
     week_map = {
         1: "Wild Card",
@@ -132,6 +138,14 @@ def fetch_live_playoff_stats():
             # Fetch stats for each game in this week
             for game in games:
                 game_id = game.get('gameID')
+                
+                # Check Status for Live Highlighting
+                status = game.get('gameStatus')
+                if status == "Live" or status == "InProgress":
+                    home = game.get('homeTeam')
+                    away = game.get('awayTeam')
+                    if home: live_teams_set.add(home)
+                    if away: live_teams_set.add(away)
                 
                 # Fetch Box Score
                 params_box = {"gameID": game_id, "fantasyPoints": "true"}
@@ -220,7 +234,7 @@ def fetch_live_playoff_stats():
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
             
-    return stats_by_round, weekly_detailed_stats, player_teams_map
+    return stats_by_round, weekly_detailed_stats, player_teams_map, list(live_teams_set)
 
 # --- STYLING HELPERS ---
 def style_eliminated_rows(row, player_teams_db):
@@ -247,6 +261,28 @@ def style_eliminated_rows(row, player_teams_db):
         else:
             styles.append('')
             
+    return styles
+
+def style_live_player_cell(row, player_teams_db, live_teams):
+    """
+    Highlights the 'Player' cell in yellow if their team is currently playing.
+    """
+    player_name = row.get("Player")
+    if not player_name:
+        return ['' for _ in row]
+        
+    api_name = NAME_MAP.get(player_name, player_name)
+    team = player_teams_db.get(api_name)
+    
+    is_live = team and team in live_teams
+    
+    styles = []
+    for col in row.index:
+        if is_live and col == "Player":
+            # Yellow background for In Progress players
+            styles.append('background-color: #fff59d; color: black; font-weight: bold;')
+        else:
+            styles.append('')
     return styles
 
 def style_highlight_searched_player(row, search_term):
@@ -288,6 +324,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
     }
     empty_data["WeeklyStats"] = {}
     empty_data["PlayerTeams"] = {}
+    empty_data["LiveTeams"] = []
     save_data(empty_data)
     st.rerun()
 
@@ -295,7 +332,7 @@ st.divider()
 
 if st.button('Refresh Stats from Live Games', help="Snags the latest stats from live NFL playoff games and updates team scores right quick."):
     with st.spinner('Nu...'):
-        live_stats_by_round, weekly_detailed_stats, player_teams_map = fetch_live_playoff_stats()
+        live_stats_by_round, weekly_detailed_stats, player_teams_map, live_teams = fetch_live_playoff_stats()
         
         if live_stats_by_round:
             # 1. Update Scores
@@ -323,6 +360,9 @@ if st.button('Refresh Stats from Live Games', help="Snags the latest stats from 
                 current_db["PlayerTeams"] = {}
             current_db["PlayerTeams"].update(player_teams_map)
             
+            # 4. Update Live Teams
+            current_db["LiveTeams"] = live_teams
+            
             save_data(current_db)
             st.success("Shoof, scores updated.")
         else:
@@ -335,7 +375,7 @@ with tab1:
     # --- DISPLAY LEADERBOARD ---
     summary_data = {}
     for manager, rounds in current_db.items():
-        if manager in ["WeeklyStats", "PlayerStats", "PlayerTeams"]: continue
+        if manager in ["WeeklyStats", "PlayerStats", "PlayerTeams", "LiveTeams"]: continue
         
         summary_data[manager] = {}
         for r, details in rounds.items():
@@ -357,7 +397,7 @@ with tab1:
     # --- DETAILED ROSTER BREAKDOWN ---
     st.header("Team Rosters & Weekly Breakdown")
     if ELIMINATED_TEAMS:
-        st.caption(f"🟥 Highlighted rows indicate players on eliminated teams: {', '.join(ELIMINATED_TEAMS)}")
+        st.caption(f"🟥 Red = Eliminated | 🟡 Yellow = In Progress Game")
 
     for manager, roster in TEAMS.items():
         with st.expander(f"{manager}'s Team"):
@@ -381,9 +421,10 @@ with tab1:
             
             team_df = pd.DataFrame(team_breakdown)
             
-            # Apply Styling (Elimination + Search Highlight + Bold Player Name)
+            # Apply Styling: Live -> Eliminated -> Search (Last applied wins if conflict)
             formatted_df = team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]}) \
                 .background_gradient(subset=["Total"], cmap="Blues") \
+                .apply(lambda row: style_live_player_cell(row, current_db.get("PlayerTeams", {}), current_db.get("LiveTeams", [])), axis=1) \
                 .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {})), axis=1) \
                 .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
                 .set_properties(subset=['Player'], **{'font-weight': 'bold'})
@@ -396,6 +437,7 @@ with tab2:
     # Retrieve stats from DB
     weekly_stats_db = current_db.get("WeeklyStats", {})
     player_teams_db = current_db.get("PlayerTeams", {})
+    live_teams_db = current_db.get("LiveTeams", [])
     
     # Dropdown to select view
     view_options = ["All Rounds (Cumulative)"] + PLAYOFF_ROUNDS
@@ -447,7 +489,7 @@ with tab2:
         stats_df = pd.DataFrame(all_player_stats)
         stats_df = stats_df.sort_values(by="PPR", ascending=False)
         
-        # Apply Styling (Search Highlight + Bold Player Name)
+        # Apply Styling: Live -> Eliminated -> Search
         styled_stats_df = stats_df.style.format({
                 "Passing Yards": "{:,}",
                 "Rush/Rec Yards": "{:,}",
@@ -459,6 +501,7 @@ with tab2:
                 "PPR": "{:.2f}"
             }) \
         .background_gradient(subset=["PPR"], cmap="Oranges") \
+        .apply(lambda row: style_live_player_cell(row, player_teams_db, live_teams_db), axis=1) \
         .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1) \
         .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
         .set_properties(subset=['Player'], **{'font-weight': 'bold'})
