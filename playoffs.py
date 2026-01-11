@@ -241,6 +241,20 @@ def style_eliminated_rows(row, player_teams_db):
         return ['background-color: #ffcccc; color: #8b0000;' for _ in row]
     return ['' for _ in row]
 
+def style_highlight_searched_player(row, search_term):
+    """
+    Highlights the specific row matching the search term in Yellow.
+    """
+    if not search_term:
+        return ['' for _ in row]
+        
+    player_name = str(row.get("Player", "")).lower()
+    if search_term.lower() in player_name:
+        # Yellow background, bold text for the searched player
+        return ['background-color: #fffde7; color: #000; font-weight: bold; border: 2px solid #fbc02d;' for _ in row]
+    
+    return ['' for _ in row]
+
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Playoff Fantasy", layout="wide")
 st.title("🏈 Relph League Playoff Fantasy")
@@ -250,6 +264,12 @@ current_db = load_data()
 
 # Sidebar controls
 st.sidebar.header("Admin Controls")
+
+# --- HIGHLIGHT SEARCH ---
+st.sidebar.subheader("🔍 Find Player")
+search_player = st.sidebar.text_input("Highlight Player Name", placeholder="e.g. Josh Allen")
+
+st.sidebar.divider()
 st.sidebar.caption("Points are automatically assigned to weeks based on API Week Number (1=WC, 2=Div, 3=Conf, 4=SB).")
 
 # --- RESET BUTTON ---
@@ -265,8 +285,8 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
 
 st.divider()
 
-if st.button('🔄 Fetch & Save Live Stats'):
-    with st.spinner('Checking game status & team affiliations...'):
+if st.button('Refresh Stats from Live Games', help="Snags the latest stats from live NFL playoff games and updates team scores right quick."):
+    with st.spinner('Nu...'):
         live_stats_by_round, weekly_detailed_stats, player_teams_map = fetch_live_playoff_stats()
         
         if live_stats_by_round:
@@ -296,7 +316,7 @@ if st.button('🔄 Fetch & Save Live Stats'):
             current_db["PlayerTeams"].update(player_teams_map)
             
             save_data(current_db)
-            st.success("Stats & Team Status Updated!")
+            st.success("Shoof, scores updated.")
         else:
             st.error("Could not retrieve live stats.")
 
@@ -353,12 +373,14 @@ with tab1:
             
             team_df = pd.DataFrame(team_breakdown)
             
-            # Apply Elimination Highlight
+            # Apply Styling (Elimination + Search Highlight + Bold Player Name)
             formatted_df = team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]}) \
                 .background_gradient(subset=["Total"], cmap="Blues") \
-                .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {})), axis=1)
+                .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {})), axis=1) \
+                .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
+                .set_properties(subset=['Player'], **{'font-weight': 'bold'})
 
-            st.dataframe(formatted_df)
+            st.dataframe(formatted_df, use_container_width=True)
 
 with tab2:
     st.header("Detailed Player Stats")
@@ -417,7 +439,7 @@ with tab2:
         stats_df = pd.DataFrame(all_player_stats)
         stats_df = stats_df.sort_values(by="PPR", ascending=False)
         
-        # Apply Styling
+        # Apply Styling (Search Highlight + Bold Player Name)
         styled_stats_df = stats_df.style.format({
                 "Passing Yards": "{:,}",
                 "Rush/Rec Yards": "{:,}",
@@ -429,8 +451,10 @@ with tab2:
                 "PPR": "{:.2f}"
             }) \
         .background_gradient(subset=["PPR"], cmap="Oranges") \
-        .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1)
+        .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1) \
+        .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
+        .set_properties(subset=['Player'], **{'font-weight': 'bold'})
         
-        st.dataframe(styled_stats_df)
+        st.dataframe(styled_stats_df, use_container_width=True)
     else:
         st.info("No detailed stats available yet. Please click 'Fetch & Save Live Stats'.")
