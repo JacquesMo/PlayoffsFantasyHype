@@ -428,9 +428,8 @@ with tab2:
                 "2Pt Conv": "{:,}",
                 "PPR": "{:.2f}"
             }) \
-            
-            .background_gradient(subset=["PPR"], cmap="Oranges") \
-            .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1)
+        .background_gradient(subset=["PPR"], cmap="Oranges") \
+        .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1)
         
         st.dataframe(styled_stats_df)
     else:
