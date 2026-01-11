@@ -397,7 +397,7 @@ with tab1:
     # --- DETAILED ROSTER BREAKDOWN ---
     st.header("Team Rosters & Weekly Breakdown")
     if ELIMINATED_TEAMS:
-        st.caption(f"🟥 Red = Eliminated | 🟡 Yellow = In Progress Game")
+        st.caption(f"🟥 Red = Eliminated")
 
     for manager, roster in TEAMS.items():
         with st.expander(f"{manager}'s Team"):
