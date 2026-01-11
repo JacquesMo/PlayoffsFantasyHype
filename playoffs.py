@@ -23,7 +23,7 @@ PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super B
 # --- ELIMINATED TEAMS ---
 # ADMIN: Add the 2 or 3 letter abbreviation of eliminated teams here to highlight them in red.
 # Example: ["MIA", "NYG", "CLE"]
-ELIMINATED_TEAMS = [] 
+ELIMINATED_TEAMS = ["GB"] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -428,6 +428,7 @@ with tab2:
                 "2Pt Conv": "{:,}",
                 "PPR": "{:.2f}"
             }) \
+            
             .background_gradient(subset=["PPR"], cmap="Oranges") \
             .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1)
         
