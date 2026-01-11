@@ -237,9 +237,17 @@ def style_eliminated_rows(row, player_teams_db):
     team = player_teams_db.get(api_name)
     
     # Check if team is eliminated
-    if team and team in ELIMINATED_TEAMS:
-        return ['background-color: #ffcccc; color: #8b0000;' for _ in row]
-    return ['' for _ in row]
+    is_eliminated = team and team in ELIMINATED_TEAMS
+    
+    styles = []
+    for col in row.index:
+        # Only highlight the specific 'Player' column/cell
+        if is_eliminated and col == "Player":
+            styles.append('background-color: #ffcccc; color: #8b0000;')
+        else:
+            styles.append('')
+            
+    return styles
 
 def style_highlight_searched_player(row, search_term):
     """
