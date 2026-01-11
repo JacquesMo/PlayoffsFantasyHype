@@ -136,26 +136,8 @@ def fetch_live_playoff_stats():
                 p_stats = box_data.get('body', {}).get('playerStats', {})
                 for pid, info in p_stats.items():
                     name = info.get('longName')
-                    # Grab PPR points
-                    ppr = float(info.get('fantasyPointsDefault', {}).get('PPR', 0))
-                    
-                    # Add to the specific round bucket
-                    stats_by_round[round_name][name] = ppr
-                    
-                    # --- AGGREGATE DETAILED STATS FOR THIS ROUND ---
-                    if name not in weekly_detailed_stats[round_name]:
-                        weekly_detailed_stats[round_name][name] = {
-                            "Passing Yards": 0,
-                            "Rush/Rec Yards": 0,
-                            "Passing TD": 0,
-                            "Rush/Rec TD": 0,
-                            "Receptions": 0,
-                            "Fumble/Pick": 0,
-                            "2Pt Conv": 0,
-                            "PPR": 0.0
-                        }
-                    
-                    # Extract raw stats safely
+
+                    # --- EXTRACT RAW STATS SAFELY ---
                     passing = info.get('Passing', {})
                     rushing = info.get('Rushing', {})
                     receiving = info.get('Receiving', {})
@@ -181,6 +163,41 @@ def fetch_live_playoff_stats():
                     tp_pass = int(passing.get('twoPtPass', 0) or 0)
                     tp_rush = int(rushing.get('twoPtRush', 0) or 0)
                     tp_rec = int(receiving.get('twoPtRec', 0) or 0)
+
+                    # --- MANUAL PPR CALCULATION ---
+                    # Enforcing -2 for Turnovers
+                    ppr_score = (
+                        (p_yds * 0.04) +      # Passing Yards
+                        (p_td * 4) +          # Passing TDs
+                        (r_yds * 0.1) +       # Rushing Yards
+                        (r_td * 6) +          # Rushing TDs
+                        (rec_yds * 0.1) +     # Receiving Yards
+                        (rec_td * 6) +        # Receiving TDs
+                        (rec_count * 1) +     # Receptions
+                        (tp_pass * 2) +       # 2Pt Pass
+                        (tp_rush * 2) +       # 2Pt Rush
+                        (tp_rec * 2) -        # 2Pt Rec
+                        (ints * 2) -          # Interceptions (-2)
+                        (fumbles * 2)         # Fumbles Lost (-2)
+                    )
+                    
+                    ppr_score = round(ppr_score, 2)
+                    
+                    # Add to the specific round bucket (Leaderboard usage)
+                    stats_by_round[round_name][name] = ppr_score
+                    
+                    # --- AGGREGATE DETAILED STATS FOR THIS ROUND ---
+                    if name not in weekly_detailed_stats[round_name]:
+                        weekly_detailed_stats[round_name][name] = {
+                            "Passing Yards": 0,
+                            "Rush/Rec Yards": 0,
+                            "Passing TD": 0,
+                            "Rush/Rec TD": 0,
+                            "Receptions": 0,
+                            "Fumble/Pick": 0,
+                            "2Pt Conv": 0,
+                            "PPR": 0.0
+                        }
                     
                     # Update totals for this round
                     stats_ref = weekly_detailed_stats[round_name][name]
@@ -191,7 +208,7 @@ def fetch_live_playoff_stats():
                     stats_ref["Receptions"] += rec_count
                     stats_ref["Fumble/Pick"] += (ints + fumbles)
                     stats_ref["2Pt Conv"] += (tp_pass + tp_rush + tp_rec)
-                    stats_ref["PPR"] += ppr
+                    stats_ref["PPR"] += ppr_score
 
         except Exception as e:
             st.error(f"Error fetching data for {round_name}: {e}")
