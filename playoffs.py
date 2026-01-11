@@ -303,6 +303,21 @@ def style_highlight_searched_player(row, search_term):
 st.set_page_config(page_title="Playoff Fantasy", layout="wide")
 st.title("🏈 Relph League Playoff Fantasy")
 
+# --- CUSTOM CSS FOR BLUE BUTTON ---
+st.markdown("""
+    <style>
+    div.stButton > button[kind="primary"] {
+        background-color: #2196F3 !important;
+        border: 1px solid #2196F3 !important;
+        color: white !important;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #1976D2 !important;
+        border: 1px solid #1976D2 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Load existing data
 current_db = load_data()
 
@@ -330,7 +345,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
 
 st.divider()
 
-if st.button('Refresh Stats from Live Games', help="Snags the latest stats from live NFL playoff games and updates team scores right quick."):
+if st.button('Refresh Stats from Live Games', type='primary', help="Snags the latest stats from live NFL playoff games and updates team scores right quick."):
     with st.spinner('Nu...'):
         live_stats_by_round, weekly_detailed_stats, player_teams_map, live_teams = fetch_live_playoff_stats()
         
