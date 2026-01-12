@@ -23,7 +23,7 @@ PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super B
 # --- ELIMINATED TEAMS ---
 # ADMIN: Add the 2 or 3 letter abbreviation of eliminated teams here to highlight them in red.
 # Example: ["MIA", "NYG", "CLE"]
-ELIMINATED_TEAMS = ["GB", "JAX", "CAR"] 
+ELIMINATED_TEAMS = ["GB", "JAX", "CAR", "LAC", "PHI"] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -46,7 +46,7 @@ NAME_MAP = {
 # --- YOUR TEAMS ---
 TEAMS = {
     "Max": ["Trevor Lawrence", "TreVeyon Henderson", "Puka", "Nico", "Christian Watson", "Parker Washington"],
-    "Mash": ["Matthew Stafford", "James Cook", "A.J. Brown", "Rome", "Woody Marks", "Blake Corum"],
+    "Mash": ["Matthew Stafford", "James Cook III", "A.J. Brown", "Rome", "Woody Marks", "Blake Corum"],
     "Relph": ["Sam Darnold", "Travis Etienne Jr.", "Njigba", "Courtland Sutton", "Dallas Goedert", "Omarion Hampton"],
     "Ovi": ["Caleb Williams", "CMC", "Tae", "Diggs", "Rhamondre Stevenson", "Luther Burden III"],
     "Matalon": ["'Drake Maye'", "Kyren", "DeVonta Smith", "Jauan Jennings", "RJ Harvey", "Hunter Henry"],
