@@ -23,7 +23,7 @@ PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super B
 # --- ELIMINATED TEAMS ---
 # ADMIN: Add the 2 or 3 letter abbreviation of eliminated teams here to highlight them in red.
 # Example: ["MIA", "NYG", "CLE"]
-ELIMINATED_TEAMS = ["JAX", "CAR", "LAC", "PHI"] 
+ELIMINATED_TEAMS = ["JAX", "CAR", "LAC", "PHI", "GB"] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
