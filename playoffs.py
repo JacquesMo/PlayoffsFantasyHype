@@ -20,10 +20,10 @@ DB_FILE = "playoff_data.json"
 # Playoff Schedule Rounds
 PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super Bowl"]
 
-# --- ELIMINATED TEAMS ---
-# ADMIN: Add the 2 or 3 letter abbreviation of eliminated teams here to highlight them in red.
-# Example: ["MIA", "NYG", "CLE"]
-ELIMINATED_TEAMS = ["JAX", "CAR", "LAC", "PHI", "GB"] 
+# --- DEFAULT ELIMINATED TEAMS ---
+# This list is used as the starting point. 
+# New teams added via the sidebar will be saved to the database.
+DEFAULT_ELIMINATED_TEAMS = ["DAL"]
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -81,6 +81,8 @@ def load_data():
                     data["PlayerTeams"] = {}
                 if "LiveTeams" not in data:
                     data["LiveTeams"] = []
+                if "EliminatedTeams" not in data:
+                    data["EliminatedTeams"] = list(DEFAULT_ELIMINATED_TEAMS)
                     
                 return data
             except json.JSONDecodeError:
@@ -93,6 +95,7 @@ def load_data():
     initial_data["WeeklyStats"] = {}
     initial_data["PlayerTeams"] = {} # Store Player -> NFL Team mapping
     initial_data["LiveTeams"] = []   # Store teams currently playing
+    initial_data["EliminatedTeams"] = list(DEFAULT_ELIMINATED_TEAMS) # Store eliminated teams
     return initial_data
 
 def save_data(data):
@@ -237,7 +240,7 @@ def fetch_live_playoff_stats():
     return stats_by_round, weekly_detailed_stats, player_teams_map, list(live_teams_set)
 
 # --- STYLING HELPERS ---
-def style_eliminated_rows(row, player_teams_db):
+def style_eliminated_rows(row, player_teams_db, eliminated_teams_list):
     """
     Pandas styling function to highlight rows in red if the player's team is eliminated.
     Expects 'Player' to be a column in the row.
@@ -251,7 +254,7 @@ def style_eliminated_rows(row, player_teams_db):
     team = player_teams_db.get(api_name)
     
     # Check if team is eliminated
-    is_eliminated = team and team in ELIMINATED_TEAMS
+    is_eliminated = team and team in eliminated_teams_list
     
     styles = []
     for col in row.index:
@@ -320,6 +323,7 @@ st.markdown("""
 
 # Load existing data
 current_db = load_data()
+current_eliminated_teams = current_db.get("EliminatedTeams", list(DEFAULT_ELIMINATED_TEAMS))
 
 # Sidebar controls
 st.sidebar.header("Admin Controls")
@@ -327,6 +331,27 @@ st.sidebar.header("Admin Controls")
 # --- HIGHLIGHT SEARCH ---
 st.sidebar.subheader("🔍 Find Player")
 search_player = st.sidebar.text_input("Highlight Player Name", placeholder="e.g. Josh Allen")
+
+st.sidebar.divider()
+
+# --- MANAGE ELIMINATED TEAMS ---
+st.sidebar.subheader("🚫 Manage Eliminated Teams")
+with st.sidebar.form("add_elim_team"):
+    new_team_input = st.text_input("Add Team (Abbr)", placeholder="e.g. DAL", max_chars=3)
+    submitted = st.form_submit_button("Mark Eliminated")
+    
+    if submitted and new_team_input:
+        team_abbr = new_team_input.upper().strip()
+        if team_abbr not in current_eliminated_teams:
+            current_eliminated_teams.append(team_abbr)
+            current_db["EliminatedTeams"] = current_eliminated_teams
+            save_data(current_db)
+            st.success(f"{team_abbr} added to eliminated list.")
+            st.rerun()
+        else:
+            st.warning("Team already in list.")
+
+st.sidebar.caption(f"Current List: {', '.join(current_eliminated_teams)}")
 
 st.sidebar.divider()
 st.sidebar.caption("Points are automatically assigned to weeks based on API Week Number (1=WC, 2=Div, 3=Conf, 4=SB).")
@@ -340,6 +365,7 @@ if st.sidebar.button("⚠️ Reset All Data", help="Clears all saved points and 
     empty_data["WeeklyStats"] = {}
     empty_data["PlayerTeams"] = {}
     empty_data["LiveTeams"] = []
+    empty_data["EliminatedTeams"] = list(DEFAULT_ELIMINATED_TEAMS) # Reset to default list
     save_data(empty_data)
     st.rerun()
 
@@ -390,7 +416,7 @@ with tab1:
     # --- DISPLAY LEADERBOARD ---
     summary_data = {}
     for manager, rounds in current_db.items():
-        if manager in ["WeeklyStats", "PlayerStats", "PlayerTeams", "LiveTeams"]: continue
+        if manager in ["WeeklyStats", "PlayerStats", "PlayerTeams", "LiveTeams", "EliminatedTeams"]: continue
         
         summary_data[manager] = {}
         for r, details in rounds.items():
@@ -411,8 +437,8 @@ with tab1:
 
     # --- DETAILED ROSTER BREAKDOWN ---
     st.header("Team Rosters & Weekly Breakdown")
-    if ELIMINATED_TEAMS:
-        st.caption(f"🟥 Red = Eliminated")
+    if current_eliminated_teams:
+        st.caption(f"🟥 Red = Eliminated ({', '.join(current_eliminated_teams)})")
 
     for manager, roster in TEAMS.items():
         with st.expander(f"{manager}'s Team"):
@@ -440,7 +466,7 @@ with tab1:
             formatted_df = team_df.style.format({r: "{:.2f}" for r in PLAYOFF_ROUNDS + ["Total"]}) \
                 .background_gradient(subset=["Total"], cmap="Blues") \
                 .apply(lambda row: style_live_player_cell(row, current_db.get("PlayerTeams", {}), current_db.get("LiveTeams", [])), axis=1) \
-                .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {})), axis=1) \
+                .apply(lambda row: style_eliminated_rows(row, current_db.get("PlayerTeams", {}), current_eliminated_teams), axis=1) \
                 .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
                 .set_properties(subset=['Player'], **{'font-weight': 'bold'})
 
@@ -517,7 +543,7 @@ with tab2:
             }) \
         .background_gradient(subset=["PPR"], cmap="Oranges") \
         .apply(lambda row: style_live_player_cell(row, player_teams_db, live_teams_db), axis=1) \
-        .apply(lambda row: style_eliminated_rows(row, player_teams_db), axis=1) \
+        .apply(lambda row: style_eliminated_rows(row, player_teams_db, current_eliminated_teams), axis=1) \
         .apply(lambda row: style_highlight_searched_player(row, search_player), axis=1) \
         .set_properties(subset=['Player'], **{'font-weight': 'bold'})
         
