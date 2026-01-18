@@ -23,7 +23,7 @@ PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super B
 # --- DEFAULT ELIMINATED TEAMS ---
 # This list is used as the starting point. 
 # New teams added via the sidebar will be saved to the database.
-DEFAULT_ELIMINATED_TEAMS = ["DAL"]
+DEFAULT_ELIMINATED_TEAMS = ["JAX", "GB", "CAR", "PHI", "LAC", "PIT", "SF", "BUF"] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
@@ -182,7 +182,11 @@ def fetch_live_playoff_stats():
                     
                     # Turnovers
                     ints = int(passing.get('int', 0) or 0)
-                    fumbles = int(info.get('fumblesLost', 0) or 0)
+                                        
+                    # Check both top-level and Defense nested object for fumblesLost
+                    fumbles_top = int(info.get('fumblesLost', 0) or 0)
+                    fumbles_def = int(defense.get('fumblesLost', 0) or 0)
+                    fumbles = max(fumbles_top, fumbles_def)
                     
                     # 2Pt (Approximate based on common keys)
                     tp_pass = int(passing.get('twoPtPass', 0) or 0)
