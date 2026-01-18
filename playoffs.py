@@ -166,6 +166,7 @@ def fetch_live_playoff_stats():
                     passing = info.get('Passing', {})
                     rushing = info.get('Rushing', {})
                     receiving = info.get('Receiving', {})
+                    defense = info.get('Defense', {})
                     
                     # Yards
                     p_yds = int(passing.get('passYds', 0) or 0)
