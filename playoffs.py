@@ -23,7 +23,7 @@ PLAYOFF_ROUNDS = ["Wild Card", "Divisional", "Conference Championship", "Super B
 # --- DEFAULT ELIMINATED TEAMS ---
 # This list is used as the starting point. 
 # New teams added via the sidebar will be saved to the database.
-DEFAULT_ELIMINATED_TEAMS = ["JAX", "GB", "CAR", "PHI", "LAC", "PIT", "SF", "BUF", "HOU", "CHI""DEN", "LAR"] 
+DEFAULT_ELIMINATED_TEAMS = ["JAX", "GB", "CAR", "PHI", "LAC", "PIT", "SF", "BUF", "HOU", "CHI", "DEN", "LAR"] 
 
 # --- NAME MAPPER ---
 # Ensuring nicknames match official API LongNames
